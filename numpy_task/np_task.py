@@ -1,13 +1,10 @@
 import numpy as np
 from scipy.io import wavfile
 
-SAMPLING_RATE = 44100  # like 44.1 KHz
-DURATION_SECONDS = 5
-SOUND_ARRAY_LEN = SAMPLING_RATE * DURATION_SECONDS
-MAX_AMPLITUDE = 2 ** 13
-
-# From a list of https://en.wikipedia.org/wiki/Piano_key_frequencies
-NOTES = {
+class SoundWaveFactory:
+    SAMPLING_RATE = 44100
+    MAX_AMPLITUDE = 2 ** 13
+    NOTES = {
     '0': 0, 'e0': 20.60172, 'f0': 21.82676, 'f#0': 23.12465, 'g0': 24.49971, 'g#0': 25.95654, 'a0': 27.50000, 'a#0': 29.13524,
     'b0': 30.86771, 'c0': 32.70320, 'c#0': 34.64783, 'd0': 36.70810, 'd#0': 38.89087,
     'e1': 41.20344, 'f1': 43.65353, 'f#1': 46.24930, 'g1': 48.99943, 'g#1': 51.91309, 'a1': 55.00000, 'a#1': 58.27047,
@@ -25,22 +22,54 @@ NOTES = {
     'e7': 2637.020, 'f7': 2793.826, 'f#7': 2959.955, 'g7': 3135.963, 'g#7': 3322.438, 'a7': 3520.000, 'a#7': 3729.310,
     'b7': 3951.066, 'c7': 4186.009, 'c#7': 4434.922, 'd7': 4698.636, 'd#7': 4978.032,
 }
+    
+    def __init__(self, duration_seconds: float = 5):
+        self.duration_seconds = duration_seconds
+        self.sound_array_len = int(self.SAMPLING_RATE * self.duration_seconds)
+        self.common_timeline = np.linspace(0, self.duration_seconds, num=self.sound_array_len)
 
+    def get_normed_sin(self, frequency: float):
+        return self.MAX_AMPLITUDE * np.sin(2 * np.pi * frequency * self.common_timeline)
+    
+    def get_soundwave(self, note: str):
+        return self.get_normed_sin(self.NOTES[note])
+    
+    def create_note(self, note: str="a4"):
+        sound_wave = self.get_soundwave(note).astype(np.int16)
+        return sound_wave
+    
+    #Method to read a wave from .txt file
+    def read_wave_from_txt(self, text_file: str):
+        return np.loadtxt(text_file)
+    
+    #Method to print any details you think will be important about the wave
+    def wave_details(self, wave: np.ndarray):
+        print(f"Wave shape: {wave.shape[0]}")
+        print(f"Wave dtype: {wave.dtype}")
+        print(f"Min value: {np.min(wave)}")
+        print(f"Max value: {np.max(wave)}")
+        print(f"Standard deviation: {np.std(wave):.2f}")
 
-get_normed_sin = lambda timeline, frequency: MAX_AMPLITUDE * np.sin(2 * np.pi * frequency * timeline)
-get_soundwave = lambda timeline, note: get_normed_sin(timeline, NOTES[note])
-common_timeline = np.linspace(0, DURATION_SECONDS, num=SOUND_ARRAY_LEN)
+    #Method to normalize_sound_waves several waves: in both length (to the shortest file) and amplitude (according to the amplitude attribute)
+    def normalize_sound_waves(self, waves:list):
+        min_length = min(wave.shape[0] for wave in waves)
+        normalized_waves = [wave[:min_length] for wave in waves]
+        max_amplitude = max(np.max(np.abs(wave)) for wave in normalized_waves)
+        return [wave * (self.MAX_AMPLITUDE / max_amplitude) for wave in normalized_waves]
 
+    #Method to save wave into np.array txt by default and into WAV file if parameter "type='WAV'" is provided
+    def save_wave(self, sound_wave: np.ndarray, file_name: str, type: str = 'TXT'):
+        if type=='WAV':
+            wavfile.write(file_name, self.SAMPLING_RATE, sound_wave)
+        else:
+            np.savetxt(file_name, sound_wave)
 
-def create_note(note="a4", name=None, timeline: np.ndarray = common_timeline):
-    sound_wave = get_soundwave(timeline, note).astype(np.int16)
-    if name is None:
-        file_name = f"{note}_sin.wav".replace("#", "s")
-    else:
-        file_name = f"{name}.wav"
-    wavfile.write(file_name, SAMPLING_RATE, sound_wave)
-    return sound_wave
-
-if __name__ == "__main__":
-    a4 = create_note()
-    np.savetxt('a4_sin.txt', a4)  # https://numpy.org/doc/stable/reference/routines.io.html
+    #Extra: a method to switch sin waves into triangular waves;
+    def get_triangle_wave(self, frequency: float):
+        t = self.common_timeline * frequency - 0.25
+        return (2 * self.MAX_AMPLITUDE / np.pi) * np.arcsin(np.sin(2 * np.pi * t))
+    
+    
+    #Extra: a method to switch sin waves into square waves;
+    def get_square_wave(self, frequency: float):
+        return self.MAX_AMPLITUDE * np.sign(np.sin(2 * np.pi * frequency * self.common_timeline))
